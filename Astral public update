@@ -1,0 +1,249 @@
+--[[
+Public Script with Kill Aura, Toggleable ESP, Chat Reveal, and Admin Ready Features
+]]
+
+-- Settings
+_G.HeadSize = 20
+_G.HitboxEnabled = false
+_G.ClearHitbox = false
+_G.KillAura = false -- replaces old AutoM1 with Kill Aura mode
+_G.AutoM1Detector = false -- Detector version disabled by default
+
+local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
+local Rep = game:GetService("ReplicatedStorage")
+local ChatService = game:GetService("Chat")
+local CombatRemote = Rep:WaitForChild("CombatRemote")
+local ActionRemote = Rep:WaitForChild("ActionRemote")
+local lp = Players.LocalPlayer
+
+-- Track all script users (public users)
+local ScriptUsers = {}
+for _, p in pairs(Players:GetPlayers()) do
+    ScriptUsers[p.UserId] = p
+end
+Players.PlayerAdded:Connect(function(p)
+    ScriptUsers[p.UserId] = p
+end)
+Players.PlayerRemoving:Connect(function(p)
+    ScriptUsers[p.UserId] = nil
+end)
+
+-- ESP Setup
+local ESPGui = Instance.new("ScreenGui", game.CoreGui)
+ESPGui.Name = "PublicScriptESP"
+ESPGui.ResetOnSpawn = false
+
+local ESPBoxes = {}
+local espEnabled = true
+
+local function createESPForPlayer(player)
+    if ESPBoxes[player.UserId] then return ESPBoxes[player.UserId] end
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    box.AlwaysOnTop = true
+    box.ZIndex = 10
+    box.Size = Vector3.new(4, 6, 4)
+    box.Transparency = 0.4
+    box.Color3 = Color3.new(0, 1, 0) -- Green ESP for public users
+    box.Parent = ESPGui
+
+    player.CharacterAdded:Connect(function(char)
+        task.wait(0.1)
+        box.Adornee = char and char:FindFirstChild("HumanoidRootPart")
+    end)
+    player.CharacterRemoving:Connect(function()
+        box.Adornee = nil
+    end)
+
+    ESPBoxes[player.UserId] = box
+    return box
+end
+
+local function removeESPForPlayer(userId)
+    if ESPBoxes[userId] then
+        ESPBoxes[userId]:Destroy()
+        ESPBoxes[userId] = nil
+    end
+end
+
+local function refreshESP()
+    if not espEnabled then
+        -- Remove all ESP
+        for _, box in pairs(ESPBoxes) do
+            box:Destroy()
+        end
+        ESPBoxes = {}
+        return
+    end
+
+    for userId, player in pairs(ScriptUsers) do
+        if player ~= lp then
+            createESPForPlayer(player)
+        end
+    end
+    -- Remove boxes for players no longer script users
+    for userId, box in pairs(ESPBoxes) do
+        if not ScriptUsers[userId] or ScriptUsers[userId] == nil then
+            box:Destroy()
+            ESPBoxes[userId] = nil
+        end
+    end
+end
+
+-- Initial ESP refresh
+refreshESP()
+
+-- Periodic refresh to catch new/removed players
+task.spawn(function()
+    while true do
+        refreshESP()
+        task.wait(5)
+    end
+end)
+
+-- Chat reveal: make public users say "No I am a hacker" in chat near their character (visible to you)
+local function revealPlayerInChat(player)
+    if not player.Character or not player.Character:FindFirstChild("Head") then return end
+    ChatService:Chat(player.Character.Head, "No I am a hacker", Enum.ChatColor.Red)
+end
+
+Players.PlayerAdded:Connect(function(player)
+    task.defer(function()
+        wait(3)
+        revealPlayerInChat(player)
+    end)
+end)
+
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= lp then
+        task.defer(function()
+            wait(1)
+            revealPlayerInChat(p)
+        end)
+    end
+end
+
+-- Kill Aura Mode (replaces Auto M1)
+
+local function isEnemyInRange()
+    local lpChar = lp.Character
+    if not (lpChar and lpChar:FindFirstChild("HumanoidRootPart")) then return false end
+    local pos = lpChar.HumanoidRootPart.Position
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = p.Character.Humanoid
+            local targetPos = p.Character.HumanoidRootPart.Position
+            local dist = (targetPos - pos).Magnitude
+            if dist <= 15 and hum.Health > 3 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.03)
+        if _G.KillAura then
+            CombatRemote:FireServer("M1") -- spam M1 aggressively (kill aura)
+        elseif _G.AutoM1Detector then
+            if isEnemyInRange() then
+                CombatRemote:FireServer("M1")
+            end
+        else
+            task.wait(0.3)
+        end
+    end
+end)
+
+-- Aura Remote call
+local function doAura()
+    local args = { "Aura Farm" }
+    ActionRemote:FireServer(unpack(args))
+end
+
+-- GUI Setup
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "PublicExtrasGui"
+
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 230, 0, 300)
+Frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+
+local UIListLayout = Instance.new("UIListLayout", Frame)
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+
+local function newToggle(name, globalVar, callback)
+    local button = Instance.new("TextButton", Frame)
+    button.Size = UDim2.new(0.9, 0, 0, 40)
+    button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 20
+
+    local function updateText()
+        button.Text = name .. ": " .. (_G[globalVar] and "ON" or "OFF")
+    end
+    updateText()
+
+    button.MouseButton1Click:Connect(function()
+        _G[globalVar] = not _G[globalVar]
+        updateText()
+        if callback then callback(_G[globalVar]) end
+    end)
+    return button
+end
+
+newToggle("Hitbox", "HitboxEnabled")
+newToggle("Clear Hitbox", "ClearHitbox")
+newToggle("Kill Aura", "KillAura")
+newToggle("Auto M1 Detector", "AutoM1Detector")
+local espToggle = newToggle("ESP", "_ESPEnabled", function(enabled)
+    espEnabled = enabled
+    refreshESP()
+end)
+_G._ESPEnabled = true
+
+-- Aura Activation Button
+local btnAura = Instance.new("TextButton", Frame)
+btnAura.Size = UDim2.new(0.9, 0, 0, 40)
+btnAura.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+btnAura.TextColor3 = Color3.new(1,1,1)
+btnAura.Font = Enum.Font.SourceSansBold
+btnAura.TextSize = 20
+btnAura.Text = "Activate Aura"
+btnAura.MouseButton1Click:Connect(function()
+    doAura()
+end)
+
+-- Hitbox Size Input Box
+local sizeBox = Instance.new("TextBox", Frame)
+sizeBox.Size = UDim2.new(0.9, 0, 0, 40)
+sizeBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+sizeBox.TextColor3 = Color3.new(1,1,1)
+sizeBox.Font = Enum.Font.SourceSansBold
+sizeBox.TextSize = 18
+sizeBox.PlaceholderText = "Enter Hitbox Size"
+sizeBox.Text = tostring(_G.HeadSize)
+
+sizeBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local num = tonumber(sizeBox.Text)
+        if num then
+            _G.HeadSize = math.clamp(num, 1, 200)
+            sizeBox.Text = tostring(_G.HeadSize)
+        else
+            sizeBox.Text = tostring(_G.HeadSize)
+        end
+    end
+end)
+
+print("Public script loaded with Kill Aura, ESP toggle, chat reveal, and aura.")
