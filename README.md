@@ -1,6 +1,4 @@
-# Update-on-astral
-I am going to be busy in the next couple of days
-so I updated this early. The kill aura was a private feature but
-I added that so none of u guys get tired of using the same thing
-over and over again. So yeah I will update as soon as the next
-game update rolls out.
+# Reasonings
+Astral public has been shut down the channels the links all have been taken down the reasons are currently private tho there are still versions on astral
+public floating around the Internet currently but those will be impossible to find now Only astral private still works but it won't be released.Sorry for the
+let down
